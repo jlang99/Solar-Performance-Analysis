@@ -1,0 +1,31 @@
+Sub MakePDFs()
+Dim ws As Worksheet
+Dim myDate As String
+Dim folder As String
+Dim yearstring As String
+
+' Determine the year string
+If Month(Now()) = 1 Then
+    yearstring = Year(Now()) - 1
+Else
+    yearstring = Year(Now())
+End If
+
+monthString = Format(DateAdd("m", -1, Now()), "MMMM")
+folder = "G:\Shared drives\O&M\NCC Automations\In Progress\Performance Analysis - Python\Brandon\Python Switch\Also Energy Sites\Performance Reports\"
+
+For Each ws In Worksheets
+    If ws.Name <> "Main" Then
+        ' Set the PageSetup properties
+        With ws.PageSetup
+            .Zoom = False
+            .FitToPagesWide = 1
+            .FitToPagesTall = False
+        End With
+
+        ' Export the worksheet as PDF
+        ws.ExportAsFixedFormat Type:=xlTypePDF, Filename:=folder & ws.Name & " " & monthString & " " & yearstring & " Performance Report"
+    End If
+Next ws
+End Sub
+
