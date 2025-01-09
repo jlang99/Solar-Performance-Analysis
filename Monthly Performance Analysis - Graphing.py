@@ -63,13 +63,13 @@ quarterly_reports = r"G:\Shared drives\O&M\NCC Automations\In Progress\Performan
 monthly_reports = r"G:\Shared drives\O&M\NCC Automations\In Progress\Performance Analysis - Python\Brandon\Python Switch\Also Energy Sites\Monthly Performance Reports.xlsx"
 
 pvsystDB = r"G:\Shared drives\O&M\NCC Automations\In Progress\Performance Analysis - Python\Brandon\Python Switch\Also Energy Sites\PVsyst (Josephs Edits).accdb"
-xl_sheets = ['Bluebird Solar', 'Cardinal', 'Cherry Blossom Solar, LLC', 'Cougar Solar, LLC Site', 'Harrison Solar', 'Hayes', 'Hickory Solar, LLC', 'Violet Solar, LLC', 'Wellons Solar, LLC']
+xl_sheets = ['Bluebird Solar', 'Cardinal', 'Cherry Blossom Solar, LLC', 'Cougar Solar, LLC', 'Harrison Solar', 'Hayes', 'Hickory Solar, LLC', 'Violet Solar, LLC', 'Wellons Solar, LLC']
 #intialize dictionaries
 for sheet in xl_sheets:
     dfs[sheet] = {}
 
 report_sheets = ['Bluebird', 'Cardinal', 'Cherry', 'Cougar', 'Harrison', 'Hayes', 'Hickory', 'Violet', 'Wellons']
-wo_Only_sites = ['Whitetail', 'Shorthorn', 'Bulloch 1A', 'Bulloch 1B', 'Elk', 'Gray Fox', 'Harding', 'McLean', 'Holly Swamp', 'PG Solar', 'Freight Line', 'Richmond Cadle', 'Sunflower', 'Upson', 'Warbler', 'Washington', 'Whitehall']
+wo_Only_sites = ['Bulloch 1A', 'Bulloch 1B', 'Elk', 'Freight Line', 'Gray Fox', 'Harding', 'Holly Swamp', 'McLean', 'PG Solar', 'Richmond Cadle', 'Shorthorn', 'Sunflower', 'Upson', 'Warbler', 'Washington', 'Whitehall', 'Whitetail']
 for site in wo_Only_sites:
     dfs[site] = {}
 wo_sites = ['Bluebird', 'Cardinal', 'Cherry Blossom', 'Cougar', 'Harrison', 'Hayes', 'Hickory', 'Violet', 'Wellons Farm']
@@ -194,26 +194,24 @@ def clear_cells(sheet_name):
             spreadsheetId=paSheet,
             body=body
         ).execute()
-        time.sleep(1.5)
+        time.sleep(2)
 
 def delete_rows(sheet_name, woVpa):
     if woVpa == True:
-        start_r = 36
-        start_r_2 = 40
         spread = paSheet
+        s_row = 40
     else:
         spread = woSheet
-        start_r = 5
-        start_r_2 = 10
+        s_row = 12
     # Define the range to search for the start and end markers
-    search_range = f"{sheet_name}!G{start_r}:K"
+    search_range = f"{sheet_name}!G:K"
 
     # Read the data from the specified range
     result = service.spreadsheets().values().get(
         spreadsheetId=spread,
         range=search_range
     ).execute()
-    time.sleep(1.5)
+    time.sleep(2)
 
 
     values = result.get('values', [])
@@ -222,11 +220,11 @@ def delete_rows(sheet_name, woVpa):
     end_row = None
 
     # Find the start and end rows
-    for i, row in enumerate(values, start=start_r):
+    for i, row in enumerate(values):
         if 'How Repaired' in row:
             start_row = i
         elif 'End of Reporting Record' in row:
-            end_row = i-1
+            end_row = i
             break
 
     if start_row is not None and end_row is not None:
@@ -240,7 +238,7 @@ def delete_rows(sheet_name, woVpa):
                     'range': {
                         'sheetId': get_sheet_id(sheet_name),
                         'dimension': 'ROWS',
-                        'startIndex': start_row,
+                        'startIndex': start_row+1,
                         'endIndex': end_row
                     }
                 }
@@ -254,11 +252,11 @@ def delete_rows(sheet_name, woVpa):
                 spreadsheetId=spread,
                 body=body
             ).execute()
-            time.sleep(1.5)
+            time.sleep(2)
 
 
     # Define the range to search for the start and end markers for the second deletion
-    search_range_2 = f"{sheet_name}!E{start_r_2}:K"
+    search_range_2 = f"{sheet_name}!E{s_row}:K"
 
     # Read the data from the specified range
     result_2 = service.spreadsheets().values().get(
@@ -266,7 +264,7 @@ def delete_rows(sheet_name, woVpa):
         range=search_range_2
     ).execute()
 
-    time.sleep(1.5)
+    time.sleep(2)
 
     values_2 = result_2.get('values', [])
 
@@ -274,11 +272,11 @@ def delete_rows(sheet_name, woVpa):
     end_row_2 = None
 
     # Find the start and end rows for the second deletion
-    for i, row in enumerate(values_2, start=start_r_2):
+    for i, row in enumerate(values_2):
         if 'Problem Description' in row:
             start_row_2 = i  # Start deleting from the row after "Problem Description"
         elif 'End of Reporting Record' in row:
-            end_row_2 = i-1
+            end_row_2 = i
             break
 
     if start_row_2 is not None and end_row_2 is not None:
@@ -292,8 +290,8 @@ def delete_rows(sheet_name, woVpa):
                     'range': {
                         'sheetId': get_sheet_id(sheet_name),
                         'dimension': 'ROWS',
-                        'startIndex': start_row_2,
-                        'endIndex': end_row_2
+                        'startIndex': start_row_2+12,
+                        'endIndex': end_row_2+11
                     }
                 }
             }]
@@ -306,7 +304,7 @@ def delete_rows(sheet_name, woVpa):
                 spreadsheetId=spread,
                 body=body_2
             ).execute()
-            time.sleep(1.5)
+            time.sleep(2)
 
 
 def predict_poa_from_meter(df):
@@ -408,7 +406,7 @@ def insert_row(sheet_name, row_index, oVc, woVpa):
         spreadsheetId=spreadch,
         body=body
     ).execute()
-    time.sleep(1.5)
+    time.sleep(2)
 
 
 
@@ -457,7 +455,7 @@ def input_data_to_Reports():
                 valueInputOption='RAW',
                 body=body
             ).execute()
-            time.sleep(1.5)
+            time.sleep(2)
 
             # Insert rows from closed_wo data frame
             closed_wo_start_row = 39
@@ -510,8 +508,8 @@ def input_data_to_Reports():
             if datetime.datetime.now().month in [4, 7, 10, 1]:
                 delete_rows(f"{sheet_name} Quarterly", True)
                 # Insert rows from closed_wo data frame
-                qclosed_wo_start_row = 37
-                qopen_wo_start_row = 41
+                qclosed_wo_start_row = 38
+                qopen_wo_start_row = 42
                 for idx, row in groups['quarterly_closed_wo'].iterrows():
                     insert_row(f"{sheet_name} Quarterly", qclosed_wo_start_row, True, False)
                     values = [[value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '') for value in row]]
@@ -553,14 +551,20 @@ def input_data_to_Reports():
                     ).execute()
 
 
-            print(f"Finished: {sheet_name}  |  Time: {round((time.time()-start_time)/60, 2)} Minutes")
-        #wo_Only_sites = ['Whitetail', 'Shorthorn', 'Bulloch 1A', 'Bulloch 1B', 'Elk', 'Gray Fox', 'Harding', 'McLean', 'Holly Swamp', 'PG Solar', 'Freight Line', 'Richmond Cadle', 'Sunflower', 'Upson', 'Warbler', 'Washington', 'Whitehall']
+            print(f"Finished: {sheet_name:<20} |  Time: {round((time.time()-start_time)/60, 2):<4} Minutes")
+    input_WO_only_reports()
+def input_WO_only_reports():
+    global start_time
+
+    # Define the font, fill, and border styles (not applicable in Google Sheets)
+    # Format of groups['data'] = [df, sum_c_meter, p50_kwh, sum_ghi, sum_poa, inv_availability, report_date]
+    for sites, groups in dfs.items():        
         if sites in wo_Only_sites:
-            print(f"Site: {sites}")
+            print(f"    Site: {sites}")
             delete_rows(sites, False)
             # Insert rows from closed_wo data frame
-            closed_woonly_start_row = 8
-            open_woonly_start_row = 12
+            closed_woonly_start_row = 10
+            open_woonly_start_row = 14
             #Monthly Sheets
             for idx, row in groups['monthly_closed_wo'].iterrows():
                 insert_row(sites, closed_woonly_start_row, True, True)
@@ -592,14 +596,14 @@ def input_data_to_Reports():
                 time.sleep(2)
 
 
-            print(f"Finished: {sites} Monthly  |  Time: {round((time.time()-start_time)/60, 2)} Minutes")
+            print(f"Finished: {sites+" Monthly ":<20} |  Time: {round((time.time()-start_time)/60, 2):<4} Minutes")
 
             #Quarterly Pages
             site_name = f'{sites} Quarterly'
             delete_rows(site_name, False)
             # Insert rows from closed_wo data frame
-            closed_woQ_start_row = 8
-            open_woQ_start_row = 12
+            closed_woQ_start_row = 10
+            open_woQ_start_row = 14
             #Quarterly Pages
             for idx, row in groups['quarterly_closed_wo'].iterrows():
                 insert_row(site_name, closed_woQ_start_row, True, True)
@@ -630,7 +634,7 @@ def input_data_to_Reports():
                 open_woQ_start_row += 1
                 time.sleep(2)
 
-            print(f"Finished: {sites}  |  Time: {round((time.time()-start_time)/60, 2)} Minutes")
+            print(f"Finished: {sites:<20} |  Time: {round((time.time()-start_time)/60, 2):<4} Minutes")
 
             
     end_time = time.time()
@@ -830,7 +834,7 @@ def parse_wo(file):
         dfs[site]['quarterly_closed_wo'] = closed_wo_selected
 
     input_data_to_Reports()
-
+    #input_WO_only_reports()
   
 def process_xl(file, wo_file):
     # Dictionary to hold DataFrames for each sheet
