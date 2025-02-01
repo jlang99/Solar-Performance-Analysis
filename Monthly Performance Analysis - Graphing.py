@@ -135,9 +135,9 @@ def show_poa_selection(predicted_poa_sum, sum_poa, modified_poa_sum, site, dates
 
     # Create check buttons
     check_buttons = [
-        tk.Checkbutton(poa_win, text=f"Predicted POA: {predicted_poa_sum}", variable=var, onvalue=predicted_poa_sum),
-        tk.Checkbutton(poa_win, text=f"Actual Found: {sum_poa}", variable=var, onvalue=sum_poa),
-        tk.Checkbutton(poa_win, text=f"0's and -'s replaced by Predicted: {modified_poa_sum}", variable=var, onvalue=modified_poa_sum)
+        tk.Checkbutton(poa_win, text=f"Predicted POA: {round(predicted_poa_sum, 0)}", variable=var, onvalue=predicted_poa_sum),
+        tk.Checkbutton(poa_win, text=f"Actual Found: {round(sum_poa, 0)}", variable=var, onvalue=sum_poa),
+        tk.Checkbutton(poa_win, text=f"0's and -'s replaced by Predicted: {round(modified_poa_sum, 0)}", variable=var, onvalue=modified_poa_sum)
     ]
     # Set the background color of the check button with the largest value to light greenYEAR(TODAY())
     for check_button in check_buttons:
@@ -176,8 +176,8 @@ def clear_cells(sheet_name):
             'updateCells': {
                 'range': {
                     'sheetId': get_sheet_id(sheet_name),
-                    'startRowIndex': 21,  # 0-based index, so 20th row is index 19
-                    'endRowIndex': 34,    # 32 is exclusive, so it clears up to 31
+                    'startRowIndex': 22,  # 0-based index, so 20th row is index 19
+                    'endRowIndex': 35,    # 32 is exclusive, so it clears up to 31
                     'startColumnIndex': col_index,
                     'endColumnIndex': col_index + 1
                 },
@@ -199,12 +199,14 @@ def clear_cells(sheet_name):
 def delete_rows(sheet_name, woVpa):
     if woVpa == True:
         spread = paSheet
+        begin_row = 36
         s_row = 40
     else:
         spread = woSheet
+        begin_row = 7
         s_row = 12
     # Define the range to search for the start and end markers
-    search_range = f"{sheet_name}!G:K"
+    search_range = f"{sheet_name}!G{begin_row}:K"
 
     # Read the data from the specified range
     result = service.spreadsheets().values().get(
@@ -212,8 +214,6 @@ def delete_rows(sheet_name, woVpa):
         range=search_range
     ).execute()
     time.sleep(2)
-
-
     values = result.get('values', [])
 
     start_row = None
@@ -238,8 +238,8 @@ def delete_rows(sheet_name, woVpa):
                     'range': {
                         'sheetId': get_sheet_id(sheet_name),
                         'dimension': 'ROWS',
-                        'startIndex': start_row+1,
-                        'endIndex': end_row
+                        'startIndex': start_row+begin_row,
+                        'endIndex': end_row+begin_row-1
                     }
                 }
             }]
@@ -255,6 +255,8 @@ def delete_rows(sheet_name, woVpa):
             time.sleep(2)
 
 
+
+
     # Define the range to search for the start and end markers for the second deletion
     search_range_2 = f"{sheet_name}!E{s_row}:K"
 
@@ -263,8 +265,8 @@ def delete_rows(sheet_name, woVpa):
         spreadsheetId=spread,
         range=search_range_2
     ).execute()
-
     time.sleep(2)
+
 
     values_2 = result_2.get('values', [])
 
@@ -290,8 +292,8 @@ def delete_rows(sheet_name, woVpa):
                     'range': {
                         'sheetId': get_sheet_id(sheet_name),
                         'dimension': 'ROWS',
-                        'startIndex': start_row_2+12,
-                        'endIndex': end_row_2+11
+                        'startIndex': start_row_2+s_row,
+                        'endIndex': end_row_2+s_row-1
                     }
                 }
             }]
