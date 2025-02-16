@@ -643,21 +643,22 @@ def input_WO_only_reports():
     print(f"Time Taken: {round((end_time-start_time)/60, 2)} Minutes")
     messagebox.showinfo(title="Verify Pages", message="Check each Site sheet to ensure that the data is correct as well as input the Manual Entry items for this month.")
     root.destroy()
+
 def update_close_out_date(row): #Puts the Completion Notes End Date in If no Completion date
     if pd.isnull(row['Completion Date']) and pd.notnull(row['Completion Notes']):
-        match = re.search(r'(\d{1,2}/\d{1,2})', row['Completion Notes'])
+        match = re.search(r'(\d{1,2}[-/]\d{1,2})([-/](\d{2}|\d{4}))?', row['Completion Notes'])
         if match:
             month_day = match.group(1)
-            month = int(month_day.split('/')[0])
-            current_year = datetime.datetime.now().year
-            
-            # Check if the first digit is 1
-            if month == 1:
-                date_str = month_day + str(current_year)
-            else:
-                if datetime.datetime.now().month == 1:
-                    current_year -= 1
-                date_str = month_day + '/' + str(current_year)
+            year = match.group(3)
+            if not year:
+                current_year = datetime.datetime.now().year
+                year = str(current_year)
+            elif len(year) == 2:
+                current_year = datetime.datetime.now().year
+                century = current_year // 100 * 100
+                year = str(century + int(year))
+
+            date_str = f"{month_day}/{year}"
             
             try:
                 return pd.to_datetime(date_str, format='%m/%d/%Y')
@@ -682,7 +683,6 @@ def parse_wo(file):
 
 
     for site, sheet in zip(wo_sites, xl_sheets):
-        # Filter the DataFrame based on the conditions
         wo['Completion Date'] = pd.to_datetime(wo['Completion Date'], errors='coerce')
         wo['WO Date'] = pd.to_datetime(wo['WO Date'], errors='coerce')
 
