@@ -59,24 +59,21 @@ dfs = {}
 #  warn(msg)
 warnings.filterwarnings("ignore", category=UserWarning, module='openpyxl') #Prevents warning from printing
 
-quarterly_reports = r"G:\Shared drives\O&M\NCC Automations\In Progress\Performance Analysis - Python\Brandon\Python Switch\Also Energy Sites\Quarterly Performance Reports.xlsm"
-monthly_reports = r"G:\Shared drives\O&M\NCC Automations\In Progress\Performance Analysis - Python\Brandon\Python Switch\Also Energy Sites\Monthly Performance Reports.xlsx"
-
-pvsystDB = r"G:\Shared drives\O&M\NCC Automations\In Progress\Performance Analysis - Python\Brandon\Python Switch\Also Energy Sites\PVsyst (Josephs Edits).accdb"
+pvsystDB = r"G:\Shared drives\O&M\NCC Automations\Performance Reporting\PVsyst (Josephs Edits).accdb"
 xl_sheets = ['Bluebird Solar', 'Cardinal', 'Cherry Blossom Solar, LLC', 'Cougar Solar, LLC', 'Harrison Solar', 'Hayes', 'Hickory Solar, LLC', 'Violet Solar, LLC', 'Wellons Solar, LLC']
 #intialize dictionaries
 for sheet in xl_sheets:
     dfs[sheet] = {}
 
 report_sheets = ['Bluebird', 'Cardinal', 'Cherry', 'Cougar', 'Harrison', 'Hayes', 'Hickory', 'Violet', 'Wellons']
-wo_Only_sites = ['Bulloch 1A', 'Bulloch 1B', 'Elk', 'Freight Line', 'Gray Fox', 'Harding', 'Holly Swamp', 'McLean', 'PG Solar', 'Richmond Cadle', 'Shorthorn', 'Sunflower', 'Upson', 'Warbler', 'Washington', 'Whitehall', 'Whitetail']
+wo_Only_sites = ['Bulloch 1A', 'Bulloch 1B', 'Elk', 'Freight Line', 'Gray Fox', 'Harding', 'Holly Swamp', 'Mclean', 'PG Solar', 'Richmond Cadle', 'Shorthorn', 'Sunflower', 'Upson', 'Warbler', 'Washington', 'Whitehall', 'Whitetail']
 for site in wo_Only_sites:
     dfs[site] = {}
 wo_sites = ['Bluebird', 'Cardinal', 'Cherry Blossom', 'Cougar', 'Harrison', 'Hayes', 'Hickory', 'Violet', 'Wellons Farm']
 def dbcnxn():
     global db, connect_db, c
     #Connect to DB
-    db = r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=G:\Shared drives\O&M\NCC Automations\In Progress\Performance Analysis - Python\Brandon\Python Switch\Also Energy Sites\PVsyst (Josephs Edits).accdb;'
+    db = r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=G:\Shared drives\O&M\NCC Automations\Performance Reporting\PVsyst (Josephs Edits).accdb;'
     connect_db = pyodbc.connect(db)
     c = connect_db.cursor()
 
@@ -416,7 +413,7 @@ def input_data_to_Reports():
     global start_time
 
     # Define the font, fill, and border styles (not applicable in Google Sheets)
-    # Format of groups['data'] = [df, sum_c_meter, p50_kwh, sum_ghi, sum_poa, inv_availability, report_date]
+    # Format of groups['data'] = [df, sum_c_meter, total_kwh, sum_ghi, sum_poa, inv_availability, report_date, p50_kwh]
     for sites, groups in dfs.items():
         match = re.match(r'\b\w+\b', sites)
         sheet_name = match.group()
@@ -966,7 +963,7 @@ def process_xl(file, wo_file):
             filtered_df = dfd[~((dfd.iloc[:, c_meter+1:inv_end_col].lt(1) | dfd.iloc[:, c_meter+1:inv_end_col].isna()).all(axis=1))] # Filter the DataFrame to remove rows where inverters are only producing less than 1 kw for Inv Availability Calc.
             
             inv_availability = (filtered_df.iloc[:, inv_end_col].dropna().mean())/100
-            p50_kwh = degradation_calc(report_date, sheet)
+            p50_kwh, total_kwh = degradation_calc(report_date, sheet)
             if site == 'WELLONS':
                 #Adjusting Units W to kW
                 p50_kwh = p50_kwh/1000
@@ -1001,7 +998,7 @@ def process_xl(file, wo_file):
             show_poa_selection(predicted_poa_sum, sum_poa, modified_poa_sum, site, dates, dfd['Predicted_POA'], modified_poa_data, og_poa_data)
            
             #Save Data to Dict
-            dfs[sheet]['data'] = ['dfd', sum_meter, p50_kwh, sum_ghi, sum_poa_chosen, inv_availability, report_date]   # Store the DataFrame in the dictionary
+            dfs[sheet]['data'] = ['dfd', sum_meter, total_kwh, sum_ghi, sum_poa_chosen, inv_availability, report_date, p50_kwh]   # Store the DataFrame in the dictionary
         else:
             continue
     parse_wo(wo_file)
@@ -1083,7 +1080,7 @@ WHERE PlantName = ? AND MonthCode = ? AND EGrid_KWH > 0
     if sitename == 'WELLONS':
         print('Wellons p50: ', total_kwh, ' | ', degradation_percentage)
     p50_kwh = total_kwh * (1 - degradation_percentage)
-    return p50_kwh
+    return (p50_kwh, total_kwh)
 
 
 
