@@ -642,7 +642,11 @@ def input_WO_only_reports():
     root.destroy()
 
 def update_close_out_date(row): #Puts the Completion Notes End Date in If no Completion date
-    if pd.isnull(row['Completion Date']) and pd.notnull(row['Completion Notes']):
+    # Check if 'Completion Date' is empty and 'Close Out Date' is not
+    if pd.isnull(row['Completion Date']) and pd.notnull(row.get('Close Out Date')):
+        # Assign 'Close Out Date' to 'Completion Date'
+        row['Completion Date'] = row['Close Out Date']
+    elif pd.isnull(row['Completion Date']) and pd.notnull(row['Completion Notes']):
         match = re.search(r'(\d{1,2}[-/]\d{1,2})([-/](\d{2}|\d{4}))?', row['Completion Notes'])
         if match:
             month_day = match.group(1)
