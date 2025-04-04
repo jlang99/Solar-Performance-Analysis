@@ -679,7 +679,7 @@ def parse_wo(file):
     first_day_of_current_month = today.replace(day=1)
     last_day_of_previous_month = first_day_of_current_month - datetime.timedelta(days=1)
     first_day_of_previous_month = last_day_of_previous_month.replace(day=1)
-    someday_of_previous_q = first_day_of_previous_month - datetime.timedelta(days=66)
+    someday_of_previous_q = first_day_of_previous_month - datetime.timedelta(days=40)
     first_day_of_previous_q = someday_of_previous_q.replace(day=1)
 
 
