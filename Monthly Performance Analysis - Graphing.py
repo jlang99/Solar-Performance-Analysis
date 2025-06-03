@@ -1,11 +1,7 @@
-#NEED TO ADD
-#I NEED TO ADD A FUNCTION THAT IF MONTH IS JANUARY THEN TO CLEAR THE CERTAIN CELLS LIKE B20-31 AND C20-31 AND E20-31 AND K20-31
-
-#I need to add functions for WO imports and for Cougar Data: Data report incomplete.
-
-
 import pyodbc, datetime, os, time, re, warnings
 import pandas as pd
+pd.set_option('future.no_silent_downcasting', True)
+
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from sklearn.linear_model import LinearRegression
@@ -986,18 +982,21 @@ def process_xl(file, wo_file):
             predicted_poa_sum = dfd['Predicted_POA'].sum()
             
 
-            og_poa_data = dfd.iloc[:, c_poa].copy()
-            #C_POA Sum supplemented by Predicted POA.
-            dfd[c_poa] = dfd.apply(
-                lambda row: row['Predicted_POA'] if pd.isnull(row[c_poa]) else row[c_poa],
-                axis=1
-            )
-            modified_poa_data = dfd.iloc[:, c_poa].copy()
+            #Get POA col Name based on column Number
+            poa_col_name = dfd.columns[c_poa]
+
+            og_poa_data = dfd[poa_col_name].copy() # Use the column name for consistency
+
+            # This fills NaN values in the target POA column with values from 'Predicted_POA'.
+            dfd[poa_col_name] = dfd[poa_col_name].fillna(dfd['Predicted_POA']).infer_objects(copy=False)
+            
+            modified_poa_data = dfd[poa_col_name].copy() # Use the column name for consistency
 
             # Remove all values less than 0 in the c_poa column
-            dfd[c_poa] = dfd[c_poa].apply(lambda x: x if x >= 0 else 0)
+            # Use .clip(lower=0) for an efficient way to set negative values to 0.
+            dfd[poa_col_name] = dfd[poa_col_name].clip(lower=0)
             # Calculate the sum of the modified c_poa column
-            modified_poa_sum = dfd[c_poa].sum()
+            modified_poa_sum = dfd[poa_col_name].sum()
             dates = dfd['Timestamp'].copy()
             show_poa_selection(predicted_poa_sum, sum_poa, modified_poa_sum, site, dates, dfd['Predicted_POA'], modified_poa_data, og_poa_data)
            
