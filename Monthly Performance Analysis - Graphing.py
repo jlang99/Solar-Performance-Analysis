@@ -1,7 +1,7 @@
 import pyodbc, datetime, os, time, re, warnings
 import pandas as pd
 pd.set_option('future.no_silent_downcasting', True)
-
+import numpy as np
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from sklearn.linear_model import LinearRegression
@@ -548,9 +548,12 @@ def input_data_to_Reports():
 
             print(f"Finished: {sheet_name:<20} |  Time: {round((time.time()-start_time)/60, 2):<4} Minutes")
     input_WO_only_reports()
+
+
+
+
 def input_WO_only_reports():
     global start_time
-
     # Define the font, fill, and border styles (not applicable in Google Sheets)
     # Format of groups['data'] = [df, sum_c_meter, p50_kwh, sum_ghi, sum_poa, inv_availability, report_date]
     for sites, groups in dfs.items():        
@@ -856,57 +859,90 @@ def process_xl(file, wo_file):
                 c_ghi = 2
                 lb = 30000
                 upb = 55000
+                top = 4000
             elif sheet == "Cardinal":
                 c_meter = 5
                 c_poa = 3
                 c_ghi = 2
                 lb = 30000
                 upb = 55000
+                top = 8020
             elif sheet == "Cherry Blossom Solar, LLC":
                 c_meter = 4
                 c_poa = 2
                 c_ghi = 3
                 lb = 30000
                 upb = 45000
+                top = 12000
             elif sheet == "Cougar Solar, LLC Site":
                 c_meter = 4
                 c_poa = 3
                 c_ghi = 2
                 lb = -100
                 upb = 5000
+                top = 4000
             elif sheet == "Harrison Solar":
                 c_meter = 5
                 c_poa = 3
                 c_ghi = 2
                 lb = 5000
                 upb = 45000
+                top = 6000
             elif sheet == "Hayes":
                 c_meter = 5
                 c_poa = 3
                 c_ghi = 4
                 lb = 90000
                 upb = 166000
+                top = 4000
             elif sheet == "Hickory Solar, LLC":
                 c_meter = 4
                 c_poa = 2
                 c_ghi = 3
                 lb = 5000
                 upb = 12000
+                top = 6000
             elif sheet == "Violet Solar, LLC":
                 c_meter = 4
                 c_poa = 2
                 c_ghi = 3
                 lb = 30000
                 upb = 55000
+                top = 9000
             elif sheet == "Wellons Solar, LLC":
                 c_meter = 5
                 c_poa = 2
                 c_ghi = 3
                 lb = 25000
                 upb = 50000
+                top = 6000
+
 
             dfd.iloc[1, 0] = pd.to_datetime(dfd.iloc[1, 0])
             report_date = dfd.iloc[1, 0]
+
+            #Turn unrealistic values into Null values so that we can glean inv sum as meter
+            dfd.iloc[:, c_meter] = dfd.iloc[:, c_meter].where(dfd.iloc[:, c_meter] <= top, np.nan)
+
+            # Iterate through each cell in the c_meter column
+            for index, cell in dfd.iloc[:, c_meter].items():
+                if pd.isnull(cell):
+                    if sheet == 'Wellons Solar, LLC': #This should be removed as soon as 1-2 starts communicating.
+                        missing_inv_data = dfd.loc[index, 'Inverter 3-1 - SMA 800CP-US, Pac'] #Average of the Communicating Inverters
+                        sum_inverters = missing_inv_data*4
+                    else:
+                        sum_inverters = dfd.iloc[index-1, c_meter+1:inv_end_col].sum()  # Sum the inverters in the same row
+                    dfd.iloc[index-1, c_meter] = sum_inverters  # Place the sum in the blank cell
+                    timestamp = dfd.iloc[index-1, 0]  # Assuming the first column contains the timestamps
+                    
+
+                    #maybe add an if statement for if sum_inverters = 0 don't send messagebox as it is likely a site outage. has been so far. 
+                    if sum_inverters != 0:
+                        messagebox.showinfo(
+                            title="Performance Analysis: Meter Data Checks",
+                            message=f"Found missing Meter Data in {sheet} at:\nTime: {timestamp}, Replaced Value: {sum_inverters}"
+                        )
+
             sum_c_meter = dfd.iloc[:, c_meter].sum()
             sum_net_meter = dfd.iloc[:, -2].sum()
             sum_meter = max(sum_c_meter, sum_net_meter)
@@ -918,55 +954,30 @@ def process_xl(file, wo_file):
             # Execute the query and read into a DataFrame
             slope_df = pd.read_sql_query(query, connect_db, params=[site])
 
-            if site == 'WELLONS':
+            if sheet == "Wellons Solar, LLC":
                 #Converting from W to kW
                 slope_df['EGrid_KWH'] = slope_df['EGrid_KWH'] / 1000
 
             connect_db.close()
+
 
             #The Following section is untested:
             # Predict POA from meter values
             predict_poa, slope, intercept = predict_poa_from_meter(slope_df)
 
             print("Slope Formula: ", site, f" | POA = {slope}x + {intercept}")
-            #End of Untested Area          
-            #Now, How to use this Data. 
-
-            # Iterate through each cell in the c_meter column
-            for index, cell in dfd.iloc[:, c_meter].items():
-                if pd.isnull(cell):
-                    if sheet == 'Wellons Solar, LLC': #This should be removed as soon as 1-2 starts communicating.
-                        missing_inv_data = sum_inverters/5 #Average of the Communicating Inverters
-                        sum_inverters = sum_inverters + missing_inv_data
-                    else:
-                        sum_inverters = dfd.iloc[index-1, c_meter+1:inv_end_col].sum()  # Sum the inverters in the same row
-                    dfd.iloc[index-1, c_meter] = sum_inverters  # Place the sum in the blank cell
-                    timestamp = dfd.iloc[index-1, 0]  # Assuming the first column contains the timestamps
-                    
-
-
-
-                    #maybe add an if statement for if sum_inverters = 0 don't send messagebox as it is likely a site outage. has been so far. 
-                    if sum_inverters != 0:
-                        messagebox.showinfo(
-                            title="Performance Analysis: Meter Data Checks",
-                            message=f"Found missing Meter Data in {sheet} at:\nTime: {timestamp}, Replaced Value: {sum_inverters}"
-                        )
-
-
-
-
-
-
 
              # Ends at the Fourth column from last and includes it. This is only for the Filer, Select all inv to chekc for nan or 0 and removes the rows.
             filtered_df = dfd[~((dfd.iloc[:, c_meter+1:inv_end_col].lt(1) | dfd.iloc[:, c_meter+1:inv_end_col].isna()).all(axis=1))] # Filter the DataFrame to remove rows where inverters are only producing less than 1 kw for Inv Availability Calc.
             
             inv_availability = (filtered_df.iloc[:, inv_end_col].dropna().mean())/100
             p50_kwh, total_kwh = degradation_calc(report_date, sheet)
-            if site == 'WELLONS':
+            if sheet == "Wellons Solar, LLC":
                 #Adjusting Units W to kW
                 p50_kwh = p50_kwh/1000
+                total_kwh = total_kwh/1000
+
+
 
             # Filter the DataFrame to include only values greater than 0 for GHI and POA Calc
             df_filtered_C = dfd[dfd.iloc[:, c_ghi] > 0]  # Assuming column C is the 3rd column (index 2)
@@ -987,8 +998,8 @@ def process_xl(file, wo_file):
 
             og_poa_data = dfd[poa_col_name].copy() # Use the column name for consistency
 
-            # This fills NaN values in the target POA column with values from 'Predicted_POA'.
-            dfd[poa_col_name] = dfd[poa_col_name].fillna(dfd['Predicted_POA']).infer_objects(copy=False)
+            # This fills NaN, 0, and Negative values in the target POA column with values from 'Predicted_POA'.
+            dfd[poa_col_name] = dfd[poa_col_name].where(dfd[poa_col_name] > 0, dfd['Predicted_POA'])
             
             modified_poa_data = dfd[poa_col_name].copy() # Use the column name for consistency
 
