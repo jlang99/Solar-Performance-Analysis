@@ -1,6 +1,5 @@
 import pyodbc, datetime, os, time, re, warnings
 import pandas as pd
-pd.set_option('future.no_silent_downcasting', True)
 import numpy as np
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -26,6 +25,10 @@ from googleapiclient.errors import HttpError
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 paSheet = '1EHQgMAh9q3vt0ZiMXDkdQxZ8oEQJ-L1EVUhbLHa7QhI'
 woSheet = '1bxGKjFCgN-T1hxuEm3NpC7W5eyQpJo6nV8WPldHD184'
+
+testpaSheet = '1wfEawAJZ9KvLNijJQPvLGmStq8yw6DeIPikx11oU1oc'
+testwoSheet = '1aasuRuI9YT8RZvi8GqhV0K_FgmiBdiYBqjUpxW1ckrI'
+
 
 credentials = None
 if os.path.exists("PyPA-token.json"):
@@ -187,7 +190,7 @@ def clear_cells(sheet_name):
             spreadsheetId=paSheet,
             body=body
         ).execute()
-        time.sleep(2)
+        time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
 
 def delete_rows(sheet_name, woVpa):
     if woVpa == True:
@@ -206,7 +209,7 @@ def delete_rows(sheet_name, woVpa):
         spreadsheetId=spread,
         range=search_range
     ).execute()
-    time.sleep(2)
+    time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
     values = result.get('values', [])
 
     start_row = None
@@ -245,7 +248,7 @@ def delete_rows(sheet_name, woVpa):
                 spreadsheetId=spread,
                 body=body
             ).execute()
-            time.sleep(2)
+            time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
 
 
 
@@ -258,7 +261,7 @@ def delete_rows(sheet_name, woVpa):
         spreadsheetId=spread,
         range=search_range_2
     ).execute()
-    time.sleep(2)
+    time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
 
 
     values_2 = result_2.get('values', [])
@@ -299,7 +302,7 @@ def delete_rows(sheet_name, woVpa):
                 spreadsheetId=spread,
                 body=body_2
             ).execute()
-            time.sleep(2)
+            time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
 
 
 def predict_poa_from_meter(df):
@@ -330,7 +333,11 @@ def predict_poa_from_meter(df):
     
     return predict_poa, slope, intercept
 
-def insert_row(sheet_name, row_index, oVc, woVpa):
+
+
+
+
+def insert_rows(sheet_name, start_row_index, num_rows, oVc, woVpa):
     if oVc == True:
         start_col = 6
     else:
@@ -340,68 +347,48 @@ def insert_row(sheet_name, row_index, oVc, woVpa):
     else:
         spreadch = paSheet
     # Insert a new row at the specified index
-    requests = [
-        {
+    if num_rows > 0:
+        sheet_id = get_sheet_id(sheet_name)
+        end_row_index = start_row_index + num_rows
+
+        requests = [{
             'insertDimension': {
                 'range': {
-                    'sheetId': get_sheet_id(sheet_name),
+                    'sheetId': sheet_id,
                     'dimension': 'ROWS',
-                    'startIndex': row_index - 1,  # 0-based index
-                    'endIndex': row_index
+                    'startIndex': start_row_index - 1,
+                    'endIndex': end_row_index - 1
                 },
                 'inheritFromBefore': False
             }
-        },
-        # Set text wrapping for cell F of the new row
-        {
-            'updateCells': {
-                'range': {
-                    'sheetId': get_sheet_id(sheet_name),
-                    'startRowIndex': row_index - 1,
-                    'endRowIndex': row_index,
-                    'startColumnIndex': 0,  # Column F (0-based index)
-                    'endColumnIndex': 11
-                },
-                'rows': [
-                    {
-                        'values': [
-                            {
-                                'userEnteredFormat': {
-                                    'wrapStrategy': 'WRAP',
-                                    'horizontalAlignment': 'CENTER',
-                                    'verticalAlignment': 'MIDDLE'
-                                }
-                            }
-                        ] * 11
-                    }
-                ],
-                'fields': 'userEnteredFormat(wrapStrategy,horizontalAlignment,verticalAlignment)'
-            }
-        },
-        # Merge cells G:K of the new row
-        {
-            'mergeCells': {
-                'range': {
-                    'sheetId': get_sheet_id(sheet_name),
-                    'startRowIndex': row_index - 1,
-                    'endRowIndex': row_index,
-                    'startColumnIndex': start_col,  # Column G (0-based index)
-                    'endColumnIndex': 11  # Column K (0-based index)
-                },
-                'mergeType': 'MERGE_ALL'
-            }
-        }
-    ]
+        }]
 
-    body = {
-        'requests': requests
-    }
+        # Add formatting and merge requests for each new row
+        for i in range(num_rows):
+            current_row_index = start_row_index - 1 + i
+            requests.append({
+                'updateCells': {
+                    'range': {'sheetId': sheet_id, 'startRowIndex': current_row_index, 'endRowIndex': current_row_index + 1, 'startColumnIndex': 0, 'endColumnIndex': 11},
+                    'rows': [{'values': [{'userEnteredFormat': {'wrapStrategy': 'WRAP', 'horizontalAlignment': 'CENTER', 'verticalAlignment': 'MIDDLE'}}] * 11}],
+                    'fields': 'userEnteredFormat(wrapStrategy,horizontalAlignment,verticalAlignment)'
+                }
+            })
+            requests.append({
+                'mergeCells': {
+                    'range': {'sheetId': sheet_id, 'startRowIndex': current_row_index, 'endRowIndex': current_row_index + 1, 'startColumnIndex': start_col, 'endColumnIndex': 11},
+                    'mergeType': 'MERGE_ALL'
+                }
+            })
 
-    service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadch,
-        body=body
-    ).execute()
-    time.sleep(2)
+        body = {'requests': requests}
+
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadch,
+            body=body
+        ).execute()
+        time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
+
+
 
 
 
@@ -450,41 +437,44 @@ def input_data_to_Reports():
                 valueInputOption='RAW',
                 body=body
             ).execute()
-            time.sleep(2)
+            time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time) (Rate 60 executes per minute)
 
-            # Insert rows from closed_wo data frame
-            closed_wo_start_row = 39
-            open_wo_start_row = 43
-            for idx, row in groups['closed_wo'].iterrows():
-                insert_row(sheet_name, closed_wo_start_row, True, False)
-                values = [[value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '') for value in row]]
-                range_co = f"{sheet_name}!A{closed_wo_start_row}:K{closed_wo_start_row}"
-                service.spreadsheets().values().update(
-                    spreadsheetId=paSheet,
-                    range=range_co,
-                    valueInputOption='RAW',
-                    body={'values': values}
-                ).execute()
-                open_wo_start_row += 1
-                closed_wo_start_row += 1
-                time.sleep(2)
+            # Batch insert for closed_wo
+            closed_wo_df = groups['closed_wo']
+            if not closed_wo_df.empty:
+                closed_wo_start_row = 39
+                insert_rows(sheet_name, closed_wo_start_row, len(closed_wo_df), True, False)
 
+                values = []
+                for _, row in closed_wo_df.iterrows():
+                    values.append([
+                        value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '')
+                        for value in row
+                    ])
                 
-
-            # Insert rows from open_wo data frame
-            for idx, row in groups['open_wo'].iterrows():
-                insert_row(sheet_name, open_wo_start_row, False, False)
-                values = [[value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '') for value in row]]
-                range_op = f"{sheet_name}!A{open_wo_start_row}:K{open_wo_start_row}"
+                range_co = f"{sheet_name}!A{closed_wo_start_row}:K{closed_wo_start_row + len(closed_wo_df) - 1}"
                 service.spreadsheets().values().update(
-                    spreadsheetId=paSheet,
-                    range=range_op,
-                    valueInputOption='RAW',
-                    body={'values': values}
+                    spreadsheetId=paSheet, range=range_co, valueInputOption='RAW', body={'values': values}
                 ).execute()
-                open_wo_start_row += 1
-                time.sleep(2)
+                time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
 
+            # Batch insert for open_wo
+            open_wo_df = groups['open_wo']
+            if not open_wo_df.empty:
+                open_wo_start_row = 39 + len(closed_wo_df) + 4 # Start after closed WOs and header
+                insert_rows(sheet_name, open_wo_start_row, len(open_wo_df), False, False)
+
+                values = []
+                for _, row in open_wo_df.iterrows():
+                    values.append([
+                        value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '')
+                        for value in row
+                    ])
+                range_op = f"{sheet_name}!A{open_wo_start_row}:K{open_wo_start_row + len(open_wo_df) - 1}"
+                service.spreadsheets().values().update(
+                    spreadsheetId=paSheet, range=range_op, valueInputOption='RAW', body={'values': values}
+                ).execute()
+                time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
 
             # Update outage count
             outage_count = sum(any(word in str(row[4]).lower() for word in ['outage', 'trip', 'curtail', 'curtailment']) for row in groups['closed_wo'].itertuples())
@@ -502,36 +492,42 @@ def input_data_to_Reports():
             #Quarterly Reports
             if datetime.datetime.now().month in [4, 7, 10, 1]:
                 delete_rows(f"{sheet_name} Quarterly", True)
-                # Insert rows from closed_wo data frame
-                qclosed_wo_start_row = 38
-                qopen_wo_start_row = 42
-                for idx, row in groups['quarterly_closed_wo'].iterrows():
-                    insert_row(f"{sheet_name} Quarterly", qclosed_wo_start_row, True, False)
-                    values = [[value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '') for value in row]]
-                    range_co = f"{sheet_name} Quarterly!A{qclosed_wo_start_row}:K{qclosed_wo_start_row}"
-                    service.spreadsheets().values().update(
-                        spreadsheetId=paSheet,
-                        range=range_co,
-                        valueInputOption='RAW',
-                        body={'values': values}
-                    ).execute()
-                    qopen_wo_start_row += 1
-                    qclosed_wo_start_row += 1
-                    time.sleep(2)
+                # Batch insert for quarterly_closed_wo
+                q_closed_wo_df = groups.get('quarterly_closed_wo')
+                if q_closed_wo_df is not None and not q_closed_wo_df.empty:
+                    qclosed_wo_start_row = 38
+                    insert_rows(f"{sheet_name} Quarterly", qclosed_wo_start_row, len(q_closed_wo_df), True, False)
 
-                # Insert rows from open_wo data frame
-                for idx, row in groups['open_wo'].iterrows():
-                    insert_row(f"{sheet_name} Quarterly", qopen_wo_start_row, False, False)
-                    values = [[value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '') for value in row]]
-                    range_op = f"{sheet_name} Quarterly!A{qopen_wo_start_row}:K{qopen_wo_start_row}"
+                    values = []
+                    for _, row in q_closed_wo_df.iterrows():
+                        values.append([
+                            value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '')
+                            for value in row
+                        ])
+                    
+                    range_co = f"{sheet_name} Quarterly!A{qclosed_wo_start_row}:K{qclosed_wo_start_row + len(q_closed_wo_df) - 1}"
                     service.spreadsheets().values().update(
-                        spreadsheetId=paSheet,
-                        range=range_op,
-                        valueInputOption='RAW',
-                        body={'values': values}
+                        spreadsheetId=paSheet, range=range_co, valueInputOption='RAW', body={'values': values}
                     ).execute()
-                    qopen_wo_start_row += 1
-                    time.sleep(2)
+                    time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
+
+                # Batch insert for open_wo in quarterly report
+                q_open_wo_df = groups['open_wo']
+                if not q_open_wo_df.empty:
+                    qopen_wo_start_row = 38 + (len(q_closed_wo_df) if q_closed_wo_df is not None else 0) + 4
+                    insert_rows(f"{sheet_name} Quarterly", qopen_wo_start_row, len(q_open_wo_df), False, False)
+
+                    values = []
+                    for _, row in q_open_wo_df.iterrows():
+                        values.append([
+                            value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '')
+                            for value in row
+                        ])
+                    range_op = f"{sheet_name} Quarterly!A{qopen_wo_start_row}:K{qopen_wo_start_row + len(q_open_wo_df) - 1}"
+                    service.spreadsheets().values().update(
+                        spreadsheetId=paSheet, range=range_op, valueInputOption='RAW', body={'values': values}
+                    ).execute()
+                    time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
 
                 # Update outage count
                 outage_count = sum(any(word in str(row[4]).lower() for word in ['outage', 'trip', 'curtail', 'curtailment']) for row in groups['quarterly_closed_wo'].itertuples())
@@ -560,77 +556,67 @@ def input_WO_only_reports():
         if sites in wo_Only_sites:
             print(f"    Site: {sites}")
             delete_rows(sites, False)
-            # Insert rows from closed_wo data frame
-            closed_woonly_start_row = 10
-            open_woonly_start_row = 14
-            #Monthly Sheets
-            for idx, row in groups['monthly_closed_wo'].iterrows():
-                insert_row(sites, closed_woonly_start_row, True, True)
-                values = [[value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '') for value in row]]
-                range_co = f"{sites}!A{closed_woonly_start_row}:K{closed_woonly_start_row}"
-                service.spreadsheets().values().update(
-                    spreadsheetId=woSheet,
-                    range=range_co,
-                    valueInputOption='RAW',
-                    body={'values': values}
-                ).execute()
-                closed_woonly_start_row += 1
-                open_woonly_start_row += 1
-                time.sleep(2)
 
-            #Monthly Sheets
-            # Insert rows from open_wo data frame
-            for idx, row in groups['open_wo'].iterrows():
-                insert_row(sites, open_woonly_start_row, False, True)
-                values = [[value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '') for value in row]]
-                range_op = f"{sites}!A{open_woonly_start_row}:K{open_woonly_start_row}"
+            # Batch insert for monthly_closed_wo
+            monthly_closed_df = groups.get('monthly_closed_wo')
+            if monthly_closed_df is not None and not monthly_closed_df.empty:
+                closed_woonly_start_row = 10
+                insert_rows(sites, closed_woonly_start_row, len(monthly_closed_df), True, True)
+                
+                values = []
+                for _, row in monthly_closed_df.iterrows():
+                    values.append([value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '') for value in row])
+                
+                range_co = f"{sites}!A{closed_woonly_start_row}:K{closed_woonly_start_row + len(monthly_closed_df) - 1}"
                 service.spreadsheets().values().update(
-                    spreadsheetId=woSheet,
-                    range=range_op,
-                    valueInputOption='RAW',
-                    body={'values': values}
+                    spreadsheetId=woSheet, range=range_co, valueInputOption='RAW', body={'values': values}
                 ).execute()
-                open_woonly_start_row += 1
-                time.sleep(2)
+                time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
 
+            # Batch insert for open_wo
+            open_wo_df = groups.get('open_wo')
+            if open_wo_df is not None and not open_wo_df.empty:
+                open_woonly_start_row = 10 + (len(monthly_closed_df) if monthly_closed_df is not None else 0) + 4
+                insert_rows(sites, open_woonly_start_row, len(open_wo_df), False, True)
+
+                values = []
+                for _, row in open_wo_df.iterrows():
+                    values.append([value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '') for value in row])
+
+                range_op = f"{sites}!A{open_woonly_start_row}:K{open_woonly_start_row + len(open_wo_df) - 1}"
+                service.spreadsheets().values().update(
+                    spreadsheetId=woSheet, range=range_op, valueInputOption='RAW', body={'values': values}
+                ).execute()
+                time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
 
             print(f"Finished: {sites+" Monthly ":<20} |  Time: {round((time.time()-start_time)/60, 2):<4} Minutes")
 
             #Quarterly Pages
             site_name = f'{sites} Quarterly'
             delete_rows(site_name, False)
-            # Insert rows from closed_wo data frame
-            closed_woQ_start_row = 10
-            open_woQ_start_row = 14
-            #Quarterly Pages
-            for idx, row in groups['quarterly_closed_wo'].iterrows():
-                insert_row(site_name, closed_woQ_start_row, True, True)
-                values = [[value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '') for value in row]]
-                range_co = f"{site_name}!A{closed_woQ_start_row}:K{closed_woQ_start_row}"
+            
+            # Batch insert for quarterly_closed_wo
+            quarterly_closed_df = groups.get('quarterly_closed_wo')
+            if quarterly_closed_df is not None and not quarterly_closed_df.empty:
+                closed_woQ_start_row = 10
+                insert_rows(site_name, closed_woQ_start_row, len(quarterly_closed_df), True, True)
+                values = [ [value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '') for value in row] for _, row in quarterly_closed_df.iterrows() ]
+                range_co = f"{site_name}!A{closed_woQ_start_row}:K{closed_woQ_start_row + len(quarterly_closed_df) - 1}"
                 service.spreadsheets().values().update(
-                    spreadsheetId=woSheet,
-                    range=range_co,
-                    valueInputOption='RAW',
-                    body={'values': values}
+                    spreadsheetId=woSheet, range=range_co, valueInputOption='RAW', body={'values': values}
                 ).execute()
-                closed_woQ_start_row += 1
-                open_woQ_start_row += 1
-                time.sleep(2)
+                time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
 
-            #Quarterly Pages
-            # Insert rows from open_wo data frame
-            for idx, row in groups['open_wo'].iterrows():
-                insert_row(site_name, open_woQ_start_row, False, True)
-                values = [[value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '') for value in row]]
-                range_op = f"{site_name}!A{open_woQ_start_row}:K{open_woQ_start_row}"
+            # Batch insert for open_wo in quarterly
+            if open_wo_df is not None and not open_wo_df.empty:
+                open_woQ_start_row = 10 + (len(quarterly_closed_df) if quarterly_closed_df is not None else 0) + 4
+                insert_rows(site_name, open_woQ_start_row, len(open_wo_df), False, True)
+                values = [ [value.strftime("%m/%d/%Y") if isinstance(value, (datetime.datetime, datetime.date)) and value is not pd.NaT else (value if pd.notna(value) else '') for value in row] for _, row in open_wo_df.iterrows() ]
+                range_op = f"{site_name}!A{open_woQ_start_row}:K{open_woQ_start_row + len(open_wo_df) - 1}"
                 service.spreadsheets().values().update(
-                    spreadsheetId=woSheet,
-                    range=range_op,
-                    valueInputOption='RAW',
-                    body={'values': values}
+                    spreadsheetId=woSheet, range=range_op, valueInputOption='RAW', body={'values': values}
                 ).execute()
-                open_woQ_start_row += 1
-                time.sleep(2)
+                time.sleep(0.7) #Slow the executes to prevent being kicked by Google (playing with the minimum time)
 
             print(f"Finished: {sites:<20} |  Time: {round((time.time()-start_time)/60, 2):<4} Minutes")
 
