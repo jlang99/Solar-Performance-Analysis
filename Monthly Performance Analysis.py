@@ -1,4 +1,4 @@
-import pyodbc, datetime, os, time, re, warnings
+import pyodbc, datetime, os, time, re, warnings, sys
 import pandas as pd
 import numpy as np
 import tkinter as tk
@@ -16,9 +16,6 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-
-
-
 
 
 
@@ -834,6 +831,7 @@ def process_xl(file, wo_file):
         if sheet != 'Charlotte Airport':
             df = pd.read_excel(file, sheet_name=sheet, skiprows=2) # Read the sheet into a DataFrame
             dfd = df.drop(index=0) #Drop the Units Row
+            dfd.dropna(subset=[dfd.columns[0]], inplace=True)
             inv_end_col = -3 
             dbcnxn()
             #different W/S check pioints for different sites
@@ -902,6 +900,30 @@ def process_xl(file, wo_file):
                 lb = 25000
                 upb = 50000
                 top = 6000
+
+            # Checks for missing POA data, which needs to be filled by user from PVsyst
+            poa_col_name = dfd.columns[c_poa]
+            # Check for gaps (NaN/null values) in the POA data
+            if dfd[poa_col_name].isnull().any():
+                # Find the DataFrame index of the first gap
+                first_gap_index = dfd[dfd[poa_col_name].isnull()].index[0]
+
+                # Calculate the corresponding row number in the Excel sheet.
+                # read_excel(skiprows=2) skips Excel rows 1 and 2.
+                # df.drop(index=0) removes the units row (originally Excel row 3).
+                # So, dfd index 0 corresponds to Excel row 4.
+                excel_row_number = first_gap_index + 4
+                if messagebox.askokcancel(
+                    title="POA Data Gap Detected",
+                    message=f"Gaps detected in POA data for {sheet}.\n"
+                            f"First gap found at Excel row: {excel_row_number}.\n\n"
+                            f"Ok - Launches external tools for review and editing.\n"
+                            "Cancel - Continues on with Performance Analysis Process"
+                ) == True:
+                    os.startfile(r"G:\Shared drives\O&M\NCC Automations\Performance Reporting\PVsyst (Josephs Edits).accdb")
+                    os.startfile(file)
+                    root.destroy()
+                    sys.exit()
 
 
             dfd.iloc[1, 0] = pd.to_datetime(dfd.iloc[1, 0])
