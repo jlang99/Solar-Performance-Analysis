@@ -74,27 +74,37 @@ def dbcnxn():
     c = connect_db.cursor()
 
 
-def plot_poa_data(dates, predicted_poa, actual_poa, modified_poa, site):
-    fig, ax = plt.subplots(figsize=(10, 6))
+def plot_poa_data(dates, predicted_poa, actual_poa, modified_poa, site, meter_data):
+    fig, ax1 = plt.subplots(figsize=(12, 7))
     plt.subplots_adjust(bottom=0.25)
 
-    # Plot the data
-    ax.plot(dates, predicted_poa, label='Predicted POA', color='blue')
-    ax.plot(dates, actual_poa, label='Actual Found', color='orange')
-    ax.plot(dates, modified_poa, label="Modified POA", color='green')
+    # Plot the POA data on the primary y-axis
+    ax1.set_title(f"POA & Meter Data for {site}")
+    ax1.set_xlabel("Date")
+    ax1.set_ylabel("POA Value (W/m²)", color='tab:blue')
+    ax1.plot(dates, predicted_poa, label='Predicted POA', color='deepskyblue', linestyle='--')
+    ax1.plot(dates, actual_poa, label='Actual POA', color='darkorange')
+    ax1.plot(dates, modified_poa, label="Modified POA", color='limegreen')
+    ax1.tick_params(axis='y', labelcolor='tab:blue')
+    ax1.legend(loc='upper left')
 
-    ax.set_title(f"POA Data for {site}")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("POA Value")
-    ax.legend()
+    # Create a secondary y-axis for the meter data
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('Meter Value (kW)', color='tab:red')
+    ax2.plot(dates, meter_data, label='Meter (kW)', color='red', alpha=0.6)
+    ax2.tick_params(axis='y', labelcolor='tab:red')
+    ax2.legend(loc='upper right')
 
+    fig.tight_layout() # Adjust layout to prevent labels from overlapping
+    
     # Create a horizontal slider to scroll through the data
     ax_slider = plt.axes([0.1, 0.1, 0.8, 0.03], facecolor='lightgoldenrodyellow')
     slider = Slider(ax_slider, 'Scroll', 0, len(dates) - 1, valinit=0, valstep=1)
 
     def update(val):
         pos = slider.val
-        ax.set_xlim(dates[int(pos)], dates[min(int(pos) + 30, len(dates) - 1)])
+        # Set x-axis limits for both axes
+        ax1.set_xlim(dates[int(pos)], dates[min(int(pos) + 30, len(dates) - 1)])
         fig.canvas.draw_idle()
 
     slider.on_changed(update)
@@ -105,9 +115,9 @@ def plot_poa_data(dates, predicted_poa, actual_poa, modified_poa, site):
 
 
 
-def show_poa_selection(predicted_poa_sum, sum_poa, modified_poa_sum, site, dates, predicted_poa_data, modified_poa_data, actual_poa_data):
+def show_poa_selection(predicted_poa_sum, sum_poa, modified_poa_sum, site, dates, predicted_poa_data, modified_poa_data, actual_poa_data, meter_data):
     if plot_option_var.get() == True:
-        plot_poa_data(dates, predicted_poa_data, actual_poa_data, modified_poa_data, site)
+        plot_poa_data(dates, predicted_poa_data, actual_poa_data, modified_poa_data, site, meter_data)
 
 
     def on_ok():
@@ -322,11 +332,7 @@ def predict_poa_from_meter(df):
 
     # Function to predict POA based on meter value
     def predict_poa(meter_value):
-        prediction = slope * meter_value + intercept
-        if prediction > 2000:
-            return 0
-        else:
-            return prediction 
+        return slope * meter_value + intercept
     
     return predict_poa, slope, intercept
 
@@ -901,29 +907,6 @@ def process_xl(file, wo_file):
                 upb = 50000
                 top = 6000
 
-            # Checks for missing POA data, which needs to be filled by user from PVsyst
-            poa_col_name = dfd.columns[c_poa]
-            # Check for gaps (NaN/null values) in the POA data
-            if dfd[poa_col_name].isnull().any():
-                # Find the DataFrame index of the first gap
-                first_gap_index = dfd[dfd[poa_col_name].isnull()].index[0]
-
-                # Calculate the corresponding row number in the Excel sheet.
-                # read_excel(skiprows=2) skips Excel rows 1 and 2.
-                # df.drop(index=0) removes the units row (originally Excel row 3).
-                # So, dfd index 0 corresponds to Excel row 4.
-                excel_row_number = first_gap_index + 4
-                if messagebox.askokcancel(
-                    title="POA Data Gap Detected",
-                    message=f"Gaps detected in POA data for {sheet}.\n"
-                            f"First gap found at Excel row: {excel_row_number}.\n\n"
-                            f"Ok - Launches external tools for review and editing.\n"
-                            "Cancel - Continues on with Performance Analysis Process"
-                ) == True:
-                    os.startfile(r"G:\Shared drives\O&M\NCC Automations\Performance Reporting\PVsyst (Josephs Edits).accdb")
-                    os.startfile(file)
-                    root.destroy()
-                    sys.exit()
 
 
             dfd.iloc[1, 0] = pd.to_datetime(dfd.iloc[1, 0])
@@ -935,11 +918,18 @@ def process_xl(file, wo_file):
             # Iterate through each cell in the c_meter column
             for index, cell in dfd.iloc[:, c_meter].items():
                 if pd.isnull(cell):
-                    if sheet == 'Wellons Solar, LLC': #This should be removed as soon as 1-2 starts communicating.
-                        missing_inv_data = dfd.loc[index, 'Inverter 3-1 - SMA 800CP-US, Pac'] #Average of the Communicating Inverters
-                        sum_inverters = missing_inv_data*4
-                    else:
-                        sum_inverters = dfd.iloc[index-1, c_meter+1:inv_end_col].sum()  # Sum the inverters in the same row
+                    inv_columns = [col for col in dfd.columns if 'Inverter' in col and col != 'Inverter Availability']
+                    
+                    # Calculate the average, excluding NA values
+                    missing_inv_data = dfd[inv_columns].mean(axis=1, skipna=True)
+
+                    # Replace NA values with the average
+                    dfd[inv_columns] = dfd[inv_columns].fillna(missing_inv_data[index])
+                    
+                    # Sum the values for the row
+                    sum_inverters = dfd.loc[index, inv_columns].sum()
+
+                    #Replace Null Meter value with Inverter Summation
                     dfd.iloc[index-1, c_meter] = sum_inverters  # Place the sum in the blank cell
                     timestamp = dfd.iloc[index-1, 0]  # Assuming the first column contains the timestamps
                     
@@ -957,10 +947,23 @@ def process_xl(file, wo_file):
 
             # Define the SQL query
             site = sheet.upper().replace(", LLC", "").replace("SOLAR", "").replace("SITE", "").strip()
-            query = "SELECT [GlobInc_WHSQM], [EGrid_KWH] FROM [PVsystHourly] WHERE [PlantName] = ?"
+            slope_query = "SELECT [GlobInc_WHSQM], [EGrid_KWH] FROM [PVsystHourly] WHERE [PlantName] = ?"
 
             # Execute the query and read into a DataFrame
-            slope_df = pd.read_sql_query(query, connect_db, params=[site])
+            slope_df = pd.read_sql_query(slope_query, connect_db, params=[site])
+
+
+            pvsyst_query = "SELECT MonthCode, DayCode, HourCode, [GlobInc_WHSQM], [EGrid_KWH] FROM [PVsystHourly] WHERE [PlantName] = ?"
+            pvsyst_df = pd.read_sql_query(pvsyst_query, connect_db, params=[site])
+
+
+            # Extract date components from the timestamp
+            dfd['MonthCode'] = dfd.iloc[:, 0].dt.month
+            dfd['DayCode'] = dfd.iloc[:, 0].dt.day
+            dfd['HourCode'] = dfd.iloc[:, 0].dt.hour
+
+            # Merge dataframes
+            dfd = pd.merge(dfd, pvsyst_df, left_on=['MonthCode', 'DayCode', 'HourCode'], right_on=['MonthCode', 'DayCode', 'HourCode'], how='left')
 
             if sheet == "Wellons Solar, LLC":
                 #Converting from W to kW
@@ -969,23 +972,24 @@ def process_xl(file, wo_file):
             connect_db.close()
 
 
+
             #The Following section is untested:
             # Predict POA from meter values
             predict_poa, slope, intercept = predict_poa_from_meter(slope_df)
 
             print("Slope Formula: ", site, f" | POA = {slope}x + {intercept}")
 
-             # Ends at the Fourth column from last and includes it. This is only for the Filer, Select all inv to chekc for nan or 0 and removes the rows.
-            filtered_df = dfd[~((dfd.iloc[:, c_meter+1:inv_end_col].lt(1) | dfd.iloc[:, c_meter+1:inv_end_col].isna()).all(axis=1))] # Filter the DataFrame to remove rows where inverters are only producing less than 1 kw for Inv Availability Calc.
-            
-            inv_availability = (filtered_df.iloc[:, inv_end_col].dropna().mean())/100
+             # Select all inv columns to chekc for nan or 0 and removes the rows.
+            inverter_cols = [col for col in dfd.columns if 'Inverter' in col]
+            filtered_df = dfd[~((dfd[inverter_cols].lt(1) | dfd[inverter_cols].isna()).all(axis=1))]
+            inv_availability = (filtered_df['Inverter Availability'].dropna().mean())/100
+
             p50_kwh, total_kwh = degradation_calc(report_date, sheet)
+        
             if sheet == "Wellons Solar, LLC":
                 #Adjusting Units W to kW
                 p50_kwh = p50_kwh/1000
                 total_kwh = total_kwh/1000
-
-
 
             # Filter the DataFrame to include only values greater than 0 for GHI and POA Calc
             df_filtered_C = dfd[dfd.iloc[:, c_ghi] > 0]  # Assuming column C is the 3rd column (index 2)
@@ -997,17 +1001,15 @@ def process_xl(file, wo_file):
             if not (lb <= (sum_poa - sum_ghi) <= upb):
                 messagebox.showwarning(title="Performance Analysis: W/S Check", message=f"{sheet} POA is not within {lb}-{upb} more than the GHI data. Check for Issues. GHI: {sum_ghi} POA: {sum_poa} \n{sheet}")
 
-            dfd['Predicted_POA'] = dfd.iloc[:, -2].apply(predict_poa)
+            dfd['Predicted_POA'] = dfd.iloc[:, c_meter].apply(predict_poa)
             predicted_poa_sum = dfd['Predicted_POA'].sum()
             
-
             #Get POA col Name based on column Number
             poa_col_name = dfd.columns[c_poa]
-
             og_poa_data = dfd[poa_col_name].copy() # Use the column name for consistency
 
-            # This fills NaN, 0, and Negative values in the target POA column with values from 'Predicted_POA'.
-            dfd[poa_col_name] = dfd[poa_col_name].where(dfd[poa_col_name] > 0, dfd['Predicted_POA'])
+            # This fills NaN, 0, and Negative values in the target POA column with values from 'PVsyst Expected' for that Month, Day and Hour.
+            dfd[poa_col_name] = dfd[poa_col_name].where(dfd[poa_col_name] > 0, dfd['GlobInc_WHSQM'])
             
             modified_poa_data = dfd[poa_col_name].copy() # Use the column name for consistency
 
@@ -1017,7 +1019,8 @@ def process_xl(file, wo_file):
             # Calculate the sum of the modified c_poa column
             modified_poa_sum = dfd[poa_col_name].sum()
             dates = dfd['Timestamp'].copy()
-            show_poa_selection(predicted_poa_sum, sum_poa, modified_poa_sum, site, dates, dfd['Predicted_POA'], modified_poa_data, og_poa_data)
+            meter_data = dfd.iloc[:, c_meter].copy()
+            show_poa_selection(predicted_poa_sum, sum_poa, modified_poa_sum, site, dates, dfd['Predicted_POA'], modified_poa_data, og_poa_data, meter_data)
            
             #Save Data to Dict
             dfs[sheet]['data'] = ['dfd', sum_meter, total_kwh, sum_ghi, sum_poa_chosen, inv_availability, report_date, p50_kwh]   # Store the DataFrame in the dictionary
