@@ -11,12 +11,11 @@ from bs4 import BeautifulSoup
 
 from icecream import ic
 #Login to Google Script Group
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(parent_dir)
+from PythonTools import get_google_credentials
 
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
@@ -27,17 +26,7 @@ testpaSheet = '1wfEawAJZ9KvLNijJQPvLGmStq8yw6DeIPikx11oU1oc'
 testwoSheet = '1aasuRuI9YT8RZvi8GqhV0K_FgmiBdiYBqjUpxW1ckrI'
 
 
-credentials = None
-if os.path.exists("PyPA-token.json"):
-    credentials = Credentials.from_authorized_user_file("PyPA-token.json", SCOPES)
-if not credentials or not credentials.valid:
-    if credentials and credentials.expired and credentials.refresh_token:
-        credentials.refresh(Request())
-    else:
-        flow = InstalledAppFlow.from_client_secrets_file(r"G:\Shared drives\O&M\NCC Automations\Daily Automations\NCC-AutomationCredentials.json", SCOPES)
-        credentials = flow.run_local_server(port=0)
-    with open("PyPA-token.json", "w+") as token:
-        token.write(credentials.to_json())
+credentials = get_google_credentials()
 
 service = build('sheets', 'v4', credentials=credentials)
 #End Group
@@ -66,15 +55,20 @@ wo_Only_sites = ['Bulloch 1A', 'Bulloch 1B', 'Elk', 'Freight Line', 'Gray Fox', 
 for site in wo_Only_sites:
     dfs[site] = {}
 wo_sites = ['Bluebird', 'Cardinal', 'Cherry Blossom', 'Cougar', 'Harrison', 'Hayes', 'Hickory', 'Violet', 'Wellons Farm']
+
+
+
 def dbcnxn():
-    global db, connect_db, c
     #Connect to DB
     db = r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=G:\Shared drives\O&M\NCC Automations\Performance Reporting\PVsyst (Josephs Edits).accdb;'
     connect_db = pyodbc.connect(db)
     c = connect_db.cursor()
+    return c, connect_db
 
 
-def plot_poa_data(dates, predicted_poa, actual_poa, modified_poa, site, meter_data):
+
+
+def plot_poa_data(dates, predicted_poa, actual_poa, pred_mod_poa, pvsyst_mod_poa, site, meter_data):
     fig, ax1 = plt.subplots(figsize=(12, 7))
     plt.subplots_adjust(bottom=0.25)
 
@@ -84,7 +78,8 @@ def plot_poa_data(dates, predicted_poa, actual_poa, modified_poa, site, meter_da
     ax1.set_ylabel("POA Value (W/m²)", color='tab:blue')
     ax1.plot(dates, predicted_poa, label='Predicted POA', color='deepskyblue', linestyle='--')
     ax1.plot(dates, actual_poa, label='Actual POA', color='darkorange')
-    ax1.plot(dates, modified_poa, label="Modified POA", color='limegreen')
+    ax1.plot(dates, pred_mod_poa, label="Pred Modified POA", color='purple', alpha=0.7)
+    ax1.plot(dates, pvsyst_mod_poa, label="PVsyst Modified POA", color='limegreen', alpha=0.7)
     ax1.tick_params(axis='y', labelcolor='tab:blue')
     ax1.legend(loc='upper left')
 
@@ -115,9 +110,9 @@ def plot_poa_data(dates, predicted_poa, actual_poa, modified_poa, site, meter_da
 
 
 
-def show_poa_selection(predicted_poa_sum, sum_poa, modified_poa_sum, site, dates, predicted_poa_data, modified_poa_data, actual_poa_data, meter_data):
+def show_poa_selection(predicted_poa_sum, sum_poa, pred_mod_poa_sum, pvsyst_mod_poa_sum, site, dates, predicted_poa_data, pred_mod_poa, pvsyst_mod_poa, actual_poa_data, meter_data):
     if plot_option_var.get() == True:
-        plot_poa_data(dates, predicted_poa_data, actual_poa_data, modified_poa_data, site, meter_data)
+        plot_poa_data(dates, predicted_poa_data, actual_poa_data, pred_mod_poa, pvsyst_mod_poa, site, meter_data)
 
 
     def on_ok():
@@ -128,19 +123,20 @@ def show_poa_selection(predicted_poa_sum, sum_poa, modified_poa_sum, site, dates
 
     poa_win = tk.Toplevel()
     poa_win.title(f"POA: {site}")
-    poa_win.geometry('300x100+100-700')
+    poa_win.geometry('300x150+100-700')
 
     var = tk.DoubleVar()
 
     # Determine the largest value
-    largest_value = max(predicted_poa_sum, sum_poa, modified_poa_sum)
+    largest_value = max(predicted_poa_sum, sum_poa, pred_mod_poa_sum, pvsyst_mod_poa_sum)
     var.set(largest_value)
 
     # Create check buttons
     check_buttons = [
         tk.Checkbutton(poa_win, text=f"Predicted POA: {round(predicted_poa_sum, 0)}", variable=var, onvalue=predicted_poa_sum),
         tk.Checkbutton(poa_win, text=f"Actual Found: {round(sum_poa, 0)}", variable=var, onvalue=sum_poa),
-        tk.Checkbutton(poa_win, text=f"0's and -'s replaced by Predicted: {round(modified_poa_sum, 0)}", variable=var, onvalue=modified_poa_sum)
+        tk.Checkbutton(poa_win, text=f"Modified (Pred): {round(pred_mod_poa_sum, 0)}", variable=var, onvalue=pred_mod_poa_sum),
+        tk.Checkbutton(poa_win, text=f"Modified (PVsyst): {round(pvsyst_mod_poa_sum, 0)}", variable=var, onvalue=pvsyst_mod_poa_sum)
     ]
     # Set the background color of the check button with the largest value to light greenYEAR(TODAY())
     for check_button in check_buttons:
@@ -826,7 +822,9 @@ def parse_wo(file):
 
     input_data_to_Reports()
     #input_WO_only_reports()
-  
+
+
+
 def process_xl(file, wo_file):
     # Dictionary to hold DataFrames for each sheet
     global dfs
@@ -839,7 +837,7 @@ def process_xl(file, wo_file):
             dfd = df.drop(index=0) #Drop the Units Row
             dfd.dropna(subset=[dfd.columns[0]], inplace=True)
             inv_end_col = -3 
-            dbcnxn()
+            c, connect_db = dbcnxn()
             #different W/S check pioints for different sites
             #Need to Add moving GHI and POA columns data. 
             #lb and upb are lower and upper bounds for poa vs ghi check to make sure poa is tracking.
@@ -864,7 +862,7 @@ def process_xl(file, wo_file):
                 lb = 30000
                 upb = 45000
                 top = 12000
-            elif sheet == "Cougar Solar, LLC Site":
+            elif sheet == "Cougar Solar, LLC":
                 c_meter = 4
                 c_poa = 3
                 c_ghi = 2
@@ -900,20 +898,49 @@ def process_xl(file, wo_file):
                 upb = 55000
                 top = 9000
             elif sheet == "Wellons Solar, LLC":
-                c_meter = 5
+                c_meter = 4
                 c_poa = 2
                 c_ghi = 3
                 lb = 25000
                 upb = 50000
                 top = 6000
 
+            if sheet == "Cougar Solar, LLC":
+                # Check if POA is empty or zero
+                if pd.to_numeric(dfd.iloc[:, c_poa], errors='coerce').fillna(0).sum() == 0:
+                    try:
+                        df_wellons = pd.read_excel(file, sheet_name="Wellons Solar, LLC", skiprows=2)
+                        dfd_wellons = df_wellons.drop(index=0)
+                        dfd_wellons.dropna(subset=[dfd_wellons.columns[0]], inplace=True)
+                        
+                        if len(dfd) == len(dfd_wellons):
+                            dfd.iloc[:, c_poa] = dfd_wellons.iloc[:, 2].values
+                            messagebox.showinfo("Cougar POA Exception", "Cougar POA was empty/zero. Replaced with Wellons POA.")
+                        else:
+                            messagebox.showwarning("Cougar POA Exception", "Cougar POA is empty, but row count mismatch with Wellons prevented replacement.")
+                    except Exception as e:
+                        print(f"Failed to replace Cougar POA: {e}")
 
 
             dfd.iloc[1, 0] = pd.to_datetime(dfd.iloc[1, 0])
             report_date = dfd.iloc[1, 0]
 
             #Turn unrealistic values into Null values so that we can glean inv sum as meter
+            val_check = dfd.iloc[:, c_meter].max()
+            print(f"Max value before: {val_check}")
+            print(f"Column type: {dfd.iloc[:, c_meter].dtype}")
+            print("--- Top 20 Highest Values in Column ---")
+            print(dfd.iloc[:, c_meter].sort_values(ascending=False).head(20))
+            dfd.iloc[:, c_meter] = pd.to_numeric(dfd.iloc[:, c_meter], errors='coerce')
+            print(f"Max value after Numeric: {dfd.iloc[:, c_meter].max()}")
+
+
             dfd.iloc[:, c_meter] = dfd.iloc[:, c_meter].where(dfd.iloc[:, c_meter] <= top, np.nan)
+
+
+            print("--- Top 20 Highest Values in Column after Filter ---")
+            print(dfd.iloc[:, c_meter].sort_values(ascending=False).head(20))
+            print(f"Max value after: {dfd.iloc[:, c_meter].max()}")
 
             # Iterate through each cell in the c_meter column
             for index, cell in dfd.iloc[:, c_meter].items():
@@ -942,16 +969,21 @@ def process_xl(file, wo_file):
                         )
 
             sum_c_meter = dfd.iloc[:, c_meter].sum()
-            sum_net_meter = dfd.iloc[:, -2].sum()
-            sum_meter = max(sum_c_meter, sum_net_meter)
+            #Filter for large values at the beginning of dataset indicating a comms issue that was perisistent prior to month start. 
+            target_col = dfd.iloc[:, -2].copy()
+            delivered_sum_meter = dfd.iloc[:, -1].sum()
+            
+            first_idx = target_col.first_valid_index()
+            if first_idx is not None and target_col[first_idx] > top:
+                target_col[first_idx] = np.nan
+            sum_net_meter = target_col.sum()
+            print("New Sum Net Meter and Old Sum Net Meter and Delivered:", sum_net_meter, dfd.iloc[:, -2].sum(), delivered_sum_meter)
+            sum_meter = max(sum_c_meter, sum_net_meter, delivered_sum_meter)
 
-            # Define the SQL query
+        
             site = sheet.upper().replace(", LLC", "").replace("SOLAR", "").replace("SITE", "").strip()
             slope_query = "SELECT [GlobInc_WHSQM], [EGrid_KWH] FROM [PVsystHourly] WHERE [PlantName] = ?"
-
-            # Execute the query and read into a DataFrame
             slope_df = pd.read_sql_query(slope_query, connect_db, params=[site])
-
 
             pvsyst_query = "SELECT MonthCode, DayCode, HourCode, [GlobInc_WHSQM], [EGrid_KWH] FROM [PVsystHourly] WHERE [PlantName] = ?"
             pvsyst_df = pd.read_sql_query(pvsyst_query, connect_db, params=[site])
@@ -1013,14 +1045,26 @@ def process_xl(file, wo_file):
             
             modified_poa_data = dfd[poa_col_name].copy() # Use the column name for consistency
 
+            # Create Prediction Modified POA
+            pred_mod_poa = og_poa_data.where(og_poa_data > 0, dfd['Predicted_POA'])
+            pred_mod_poa = pred_mod_poa.clip(lower=0)
+            pred_mod_poa_sum = pred_mod_poa.sum()
+
             # Remove all values less than 0 in the c_poa column
             # Use .clip(lower=0) for an efficient way to set negative values to 0.
             dfd[poa_col_name] = dfd[poa_col_name].clip(lower=0)
             # Calculate the sum of the modified c_poa column
             modified_poa_sum = dfd[poa_col_name].sum()
+
+            # Create PVsyst Modified POA
+            pvsyst_mod_poa = og_poa_data.where(og_poa_data > 0, dfd['GlobInc_WHSQM'])
+            pvsyst_mod_poa = pvsyst_mod_poa.clip(lower=0)
+            pvsyst_mod_poa_sum = pvsyst_mod_poa.sum()
+
+
             dates = dfd['Timestamp'].copy()
             meter_data = dfd.iloc[:, c_meter].copy()
-            show_poa_selection(predicted_poa_sum, sum_poa, modified_poa_sum, site, dates, dfd['Predicted_POA'], modified_poa_data, og_poa_data, meter_data)
+            show_poa_selection(predicted_poa_sum, sum_poa, pred_mod_poa_sum, pvsyst_mod_poa_sum, site, dates, dfd['Predicted_POA'], pred_mod_poa, pvsyst_mod_poa, og_poa_data, meter_data)
            
             #Save Data to Dict
             dfs[sheet]['data'] = ['dfd', sum_meter, total_kwh, sum_ghi, sum_poa_chosen, inv_availability, report_date, p50_kwh]   # Store the DataFrame in the dictionary
@@ -1047,9 +1091,9 @@ def browse_files():
 
 
 
-
+#This funciton should not be used, but I don't want to delete it incase we need it later. 
 def degradation_calc(date, sheet):
-    dbcnxn()
+    c, connect_db = dbcnxn()
     # Strip "Solar" or "LLC" and change to all caps
     sitename = re.sub(r'\b(Solar|, LLC|Site)\b', '', sheet, flags=re.IGNORECASE).strip().upper()
     query = """
@@ -1061,6 +1105,8 @@ WHERE PlantName = ? AND MonthCode = ? AND EGrid_KWH > 0
 
     c.execute(query, (sitename, date.month))
     results = c.fetchall()
+    connect_db.close()
+
     results = [float(row[0]) for row in results]
     total_kwh = sum(results)
 
